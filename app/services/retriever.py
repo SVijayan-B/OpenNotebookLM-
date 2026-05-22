@@ -10,7 +10,7 @@ class Retriever:
         embedder: Embedder,
         vector_store: FAISSVectorStore,
         top_k: int = 5,
-        min_score: float = 0.3,
+        min_score: float = 0.1,
     ):
         self.embedder = embedder
         self.vector_store = vector_store
@@ -18,30 +18,54 @@ class Retriever:
         self.min_score = min_score
 
     def retrieve(self, query: str) -> List[Dict]:
-        # 1. Embed the query
+        """
+        STRICT factual retrieval.
+        Used for normal Q&A (no summaries).
+        """
+
+        # 1. Embed query
         query_vector = self.embedder.model.encode(
             [query],
             normalize_embeddings=True
         )
 
-        # 2. Search FAISS
+        # 2. FAISS search
         results = self.vector_store.search(
             query_vector=query_vector,
             top_k=self.top_k
         )
 
-        # 3. Filter weak matches
+        # 3. Filter by similarity threshold
         filtered = [
             r for r in results if r["score"] >= self.min_score
         ]
 
         return filtered
 
+    def retrieve_for_summary(self, query: str) -> List[Dict]:
+        """
+        SUMMARY MODE retrieval.
+        Broader retrieval, NO similarity filtering.
+        """
+
+        query_vector = self.embedder.model.encode(
+            [query],
+            normalize_embeddings=True
+        )
+
+        results = self.vector_store.search(
+            query_vector=query_vector,
+            top_k=10  # broader context
+        )
+
+        return results
+
     @staticmethod
     def build_context(results: List[Dict]) -> str:
         """
-        Formats retrieved chunks into LLM-ready context
+        Formats retrieved chunks into LLM-ready context.
         """
+
         context_blocks = []
 
         for i, r in enumerate(results, start=1):

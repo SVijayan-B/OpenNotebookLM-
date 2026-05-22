@@ -10,6 +10,7 @@ class FAISSVectorStore:
     def __init__(self, dim: int = 384, index_path: str = "data/faiss.index"):
         self.dim = dim
         self.index_path = Path(index_path)
+
         self.index = faiss.IndexFlatIP(dim)
         self.metadata: List[TextChunk] = []
 
@@ -17,11 +18,15 @@ class FAISSVectorStore:
             self._load()
 
     def add(self, embeddings: np.ndarray, chunks: List[TextChunk]):
+        print(f"[DEBUG] Adding {embeddings.shape[0]} vectors to FAISS")
+
         if embeddings.shape[0] != len(chunks):
             raise ValueError("Embeddings and chunks length mismatch")
 
         self.index.add(embeddings)
         self.metadata.extend(chunks)
+
+        print(f"[DEBUG] FAISS total vectors: {self.index.ntotal}")
 
     def search(self, query_vector: np.ndarray, top_k: int = 5):
         scores, indices = self.index.search(query_vector, top_k)
@@ -47,14 +52,21 @@ class FAISSVectorStore:
 
     def save(self):
         self.index_path.parent.mkdir(parents=True, exist_ok=True)
-        faiss.write_index(self.index, str(self.index_path))
 
-        meta_path = self.index_path.with_suffix(".meta.npy")
-        np.save(meta_path, self.metadata, allow_pickle=True)
+        faiss.write_index(self.index, str(self.index_path))
+        np.save(
+            self.index_path.with_suffix(".meta.npy"),
+            self.metadata,
+            allow_pickle=True,
+        )
 
     def _load(self):
+        print("[DEBUG] Loading FAISS index from disk")
+
         self.index = faiss.read_index(str(self.index_path))
 
         meta_path = self.index_path.with_suffix(".meta.npy")
         if meta_path.exists():
             self.metadata = list(np.load(meta_path, allow_pickle=True))
+        else:
+            self.metadata = []
